@@ -1,0 +1,83 @@
+// This pipeline if for deploying an Spring Boot project to App VM
+// Jenkins is running on the Devops VM and Microservice will be deployed on App VM   
+    
+    pipeline {
+    agent any 
+ environment {
+        registryCredential='dockerhubcreds' // Add your dockerhub credentials to Credentials Manager
+        IMAGE_TAG="latest"
+        REPO_NAME="sample-service"
+        REPO_URI= "sampleaccount/${REPO_NAME}:$IMAGE_TAG"
+        dockerImage= ''
+		    }
+	tools { 
+      maven 'maven_3.9.8' // Install Maven and jdk as tools
+      jdk 'jdk17'
+    }
+    stages {
+
+    stage ('Checkout') {
+       steps {
+                script {
+                    git branch: 'pre-release', credentialsId: 'bitbucketcreds', url: 'https://sample-service.git'
+                }
+            }
+    }
+    stage ('Compilation') {    
+      steps {    
+        sh "mvn clean install -Dmaven.test.skip=true -Dactive.profile=preprod"   
+        }
+    }
+    stage("Building and Uploading Image") {
+			steps {
+                script {
+                sh 'docker system prune -af'
+                dockerImage = docker.build "${REPO_NAME}:${IMAGE_TAG}"
+                sh "docker tag ${REPO_NAME}:${IMAGE_TAG} ${REPO_URI}"
+				docker.withRegistry( '', registryCredential ) { 
+				sh "docker push ${REPO_URI}"
+                    }		
+                }
+           }
+           
+        
+    }
+    stage("Deployment") {
+           steps {
+                script {
+                    sshPublisher(publishers: [
+                        sshPublisherDesc(
+                            configName: 'app',
+                            transfers: [
+                                sshTransfer(
+                                    execCommand: 
+                                    "sudo docker pull ${REPO_URI}" + 
+                                    "&& sudo docker stop ad2-user-service-preprod || true" + 
+                                    "&& sudo docker rm ad2-user-service-preprod || true" + 
+                                    "&& sudo docker run -e SPRING_PROFILES_ACTIVE=preprod -d -p 8009:8009 --name sample-service ${REPO_URI}" +
+                                    "&& sudo docker system prune -af",
+                                    sourceFiles: ''
+                                )
+                            ],
+                            usePromotionTimestamp: false,
+                            useWorkspaceInPromotion: false,
+                            verbose: true
+                        )
+                    ])
+                }
+           }
+        
+    }
+        
+    }
+     post {
+        // Clean after build
+        always {
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true
+            )
+        }
+    }
+		   }

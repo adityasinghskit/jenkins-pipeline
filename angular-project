@@ -1,0 +1,62 @@
+// This pipeline if for deploying an Angular project to Nginx server
+// Jenkins is running on the Devops VM and Nginx server is running on a separate VM (say Nginx VM)
+
+pipeline {
+    agent any
+    tools {nodejs "nodejs_angular18"} // Install Nodejs and Angular of the required version as tools
+    stages {
+        stage("checkout") {
+            steps {
+                script {
+                    git branch: 'preprod', credentialsId: 'GIT_CREDS', url: 'https://my-angular-project.git' // Add repository credentials in Credentials Manager
+                }
+            }
+        }
+        stage("building project") {
+            steps {
+                script {
+                    sh 'npm install'
+                    sh 'ng build --configuration=development'
+                }
+            }
+        }
+        stage("preprocessing for CSR") {
+            steps {
+                script {
+                    sh 'mv dist/my-angular-project/browser/index.csr.html dist/my-angular-project/browser/index.html'
+                }
+            }
+        }        
+        stage("deploying project") {
+            steps {
+                script {
+                    sshPublisher(publishers: [
+                        sshPublisherDesc(
+                            configName: 'nginx', // Deploying the Angular project on Nginx VM using, PublishOverSSh plugin
+                            transfers: [
+                                sshTransfer(
+                                    cleanRemote: false,
+                                    flatten: false,
+                                    makeEmptyDirs: true,
+                                    noDefaultExcludes: true,
+                                    remoteDirectory: 'www/pre-prod',
+                                    remoteDirectorySDF: false,
+                                    removePrefix: '',
+                                    sourceFiles: 'dist/my-angular-project/browser/**')],
+                            usePromotionTimestamp: false,
+                            useWorkspaceInPromotion: false,
+                            verbose: true)])
+                }
+            }
+        }
+    }
+     post {
+        always {
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true
+            )
+        }
+    }
+}

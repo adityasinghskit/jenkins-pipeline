@@ -1,0 +1,76 @@
+// This pipeline if for deploying an Spring Boot project to K8s Cluster as svc or load balancer
+// Jenkins is running on the Devops VM and Microservice will be deployed on App VM
+
+pipeline {
+       agent any
+       environment
+       {
+           registry = "exampleaccount/sample-service" // Add you Azure Container Registry Creds here
+           registryUrl= "exampleaccount.azurecr.io"
+           registryCredential ="ACR_CREDS"
+           dockerImage = ''
+       }
+       tools { 
+      maven 'maven_3.9.9' 
+      jdk 'jdk_17'
+    }
+stages {
+ stage ('Checkout') {
+      steps {
+         checkout changelog: false, poll: true, scm: [$class: 'GitSCM', branches: [[name: '*/release']],
+         extensions: [], userRemoteConfigs: [[credentialsId: 'GIT_CREDS',
+         url: 'https://exmaple-service.git']]]
+       }
+    }
+ stage ('Compilation') {       
+      steps {    
+        sh "mvn clean install -Dmaven.test.skip=true  -Dactive.profile=release"   
+        }}  
+  stage ('Building image') {
+      steps{
+        script {
+         dockerImage = docker.build registry + ":$BUILD_NUMBER"
+        }
+      }
+    }
+ stage ('Upload Image') {
+     steps{    
+         script {
+          docker.withRegistry( "http://${registryUrl}", registryCredential )
+            {
+            dockerImage.push()
+        
+            }
+        }
+      }
+    }
+  
+   stage ("Update Deployment yaml") {
+   steps{
+   sh "chmod +x tag.sh"
+   echo "The build number is ${env.BUILD_NUMBER}"
+   echo "You can also use \${BUILD_NUMBER} -> ${BUILD_NUMBER}"
+   sh "./tag.sh ${BUILD_NUMBER}"
+   }     
+ } 
+   
+  stage ("k8's Deployment"){
+  steps{
+  withKubeConfig([credentialsId: 'KUBE_CREDS',
+                    ]) {
+      sh 'kubectl apply -f update_example_all.yaml' // Applying kubernetes yaml file
+                    }
+ }}
+}
+ post {
+        // Clean after build
+        always {
+            sh 'docker system prune -af'
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true
+            )
+        }
+    }
+ }
