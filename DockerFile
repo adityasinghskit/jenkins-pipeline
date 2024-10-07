@@ -1,3 +1,5 @@
+# This is a sample Dockerfile you can use to deploy a Spring Boot application to a Docker container
+# This Dockerfile uses multi-stage builds to create a smaller image
 FROM openjdk:17 as build
 WORKDIR /workspace/example
 COPY mvnw .
@@ -14,4 +16,4 @@ ARG DEPENDENCY=/workspace/user/target/dependency
 COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /user/lib
 COPY --from=build ${DEPENDENCY}/META-INF /user/META-INF
 COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /user
-ENTRYPOINT ["java", "-cp","user:user/lib/*", "com.example.exampleApplication"]
+ENTRYPOINT ["java", "-cp","example:example/lib/*", "com.example.exampleApplication"]

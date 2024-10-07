@@ -1,3 +1,4 @@
+# This is a sample file for creating a deployment and service in kubernetes
 ---
 apiVersion: apps/v1
 kind: Deployment
