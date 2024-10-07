@@ -1,0 +1,17 @@
+FROM openjdk:17 as build
+WORKDIR /workspace/example
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+COPY src src
+RUN chmod +x mvnw
+RUN ./mvnw install -DskipTests
+RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
+FROM openjdk:17 as run
+ENV TZ=Asia/Calcutta
+VOLUME /tmp
+ARG DEPENDENCY=/workspace/user/target/dependency
+COPY --from=build ${DEPENDENCY}/BOOT-INF/lib /user/lib
+COPY --from=build ${DEPENDENCY}/META-INF /user/META-INF
+COPY --from=build ${DEPENDENCY}/BOOT-INF/classes /user
+ENTRYPOINT ["java", "-cp","user:user/lib/*", "com.example.exampleApplication"]

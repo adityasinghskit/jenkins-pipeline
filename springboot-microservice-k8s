@@ -1,6 +1,6 @@
 // This pipeline if for deploying an Spring Boot project to K8s Cluster as svc or load balancer
 // Jenkins is running on the Devops VM and Microservice will be deployed on App VM
-
+// Plugins required: Docker, Kubernetes CLI
 pipeline {
        agent any
        environment
